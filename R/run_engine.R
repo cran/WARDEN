@@ -172,6 +172,15 @@ run_engine <- function(arm_list,
       this_patient[[arm]]$evtlist <- NULL
 
       input_list_arm <- c(input_list_arm,output_list)
+      
+      if(input_list$accum_backwards){
+        input_list_arm$ongoing_inputs_lu <- paste0(input_list_arm$uc_lists$ongoing_inputs,"_lastupdate",recycle0 = TRUE)
+        input_out_v <- c(input_list_arm$input_out,
+                         input_list_arm$ongoing_inputs_lu
+        )
+      }else{
+        input_out_v <- c(input_list_arm$input_out)
+      }
 
       n_evt <- 0
       while(input_list_arm$curtime < Inf){
@@ -184,20 +193,14 @@ run_engine <- function(arm_list,
         n_evt <- n_evt +1
 
 
-        if (is.null(Evt)==F){  
+        if (is.null(Evt)==FALSE){  
           
           #Evalaute event
           input_list_arm <- react_evt(Evt, arm, input_list_arm)
           
           #Get extra objects to be exported
+          extra_data <- input_list_arm[input_out_v]
           
-          if(input_list$accum_backwards){
-          extra_data <- input_list_arm[c(input_list_arm$input_out,
-                                         paste0(input_list_arm$uc_lists$ongoing_inputs,"_lastupdate",recycle0 = TRUE)
-                                         )]
-          }else{
-            extra_data <- input_list_arm[c(input_list_arm$input_out)]
-          }
           extra_data <- extra_data[!sapply(extra_data,is.null)]
  
               this_patient[[arm]]$evtlist[[n_evt]] <- c(evtname = Evt$evt ,
