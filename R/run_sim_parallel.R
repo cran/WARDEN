@@ -36,7 +36,7 @@ if(getRversion() >= "2.15.1") {
 #' @param ipd Integer taking value 0 if no IPD data returned, 1 for full IPD data returned, and 2 IPD data but aggregating events
 #' @param timed_freq If NULL, it does not produce any timed outputs. Otherwise should be a number (e.g., every 1 year)
 #' @param debug If TRUE, will generate a log file
-#' @param accum_backwards If TRUE, the ongoing accumulators will count backwards (i.e., the current value is applied until the previous update). If FALSE, the current value is applied between the current event and the next time it is updated.
+#' @param accum_backwards If TRUE, the ongoing accumulators will count backwards (i.e., the current value is applied until the previous update). If FALSE, the current value is applied between the current event and the next time it is updated. If TRUE, user must use `modify_item` and `modify_item_seq` or results will be incorrect.
 #' @param continue_on_error If TRUE, on error  at patient stage will attempt to continue to the next simulation (only works if n_sim and/or n_sensitivity are > 1, not at the patient level)
 #' @param seed Starting seed to be used for the whole analysis. If null, it's set to 1 by default.
 #'
@@ -49,6 +49,7 @@ if(getRversion() >= "2.15.1") {
 #' @importFrom progressr handlers
 #' @importFrom progressr progressor
 #' @importFrom progressr handler_txtprogressbar
+#' @importFrom rlang env_clone
 #'
 #' @export
 #' 
@@ -67,9 +68,9 @@ if(getRversion() >= "2.15.1") {
 #' The engine uses the L'Ecuyer-CMRG for the random number generator.
 #' Note that if ncores > 1, then results per simulation will only be exactly replicable if using run_sim_parallel 
 #' (as seeds are automatically transformed to be seven integer seeds -i.e, L'Ecuyer-CMRG seeds-)
-#' 
-#' If no `drc` or `drq` parameters are passed within any of the input lists, these are assigned value 0.03.
 #' Note that the random seeds are set to be unique in their category (i.e., at patient level, patient-arm level, etc.)
+#' 
+#'  If no `drc` or `drq` parameters are passed within `sensitivity` or `common_all` input lists, these are assigned a default value 0.03 for discounting costs, QALYs and others.
 #'
 #' Ongoing items will look backward to the last time updated when performing the discounting and accumulation. 
 #' This means that the user does not necessarily need to keep updating the value, but only add it when the value 
@@ -77,16 +78,23 @@ if(getRversion() >= "2.15.1") {
 #' so we want to make sure to add o_q = utility at event 3 before updating utility. The program will automatically 
 #' look back until event 1). Note that in previous versions of the package backward was the default, and now this has switched to forward.
 #' 
+#' If using `accum_backwards = TRUE`, then it is mandatory for the user to use `modify_item` and `modify_item_seq` in event reactions,
+#'   as the standard assignment approach (e.g., `a <- 5`) will not calculate the right results, particularly in the presence of
+#'   conditional statements.
+#' 
 #' If the `cycle` lists are used, then it is expected the user will declare as well the name of the variable
 #'  pasted with `cycle_l` and `cycle_starttime` (e.g., c_default_cycle_l and c_default_cycle_starttime) to 
 #'  ensure the discounting can be computed using cycles, with cycle_l being the cycle length, and cycle_starttime 
 #'  being the starting time in which the variable started counting.
 #'  
-#'  `debug = TRUE` will export a log file with the timestamp up the error in the main working directory.
+#'  `debug = TRUE` will export a log file with the timestamp up the error in the main working directory. Note that
+#'  using this mode without modify_item or modify_item_seq may lead to inaccuracies if assignments are done in non-standard ways,
+#'  as the AST may not catch all the relevant assignments (e.g., an assigment like assign(paste("x_",i),5)
+#'   in a loop will not be identified, unless using modify_item()).
+#'   
 #'   If `continue_on_error` is set to FALSE, it will only export analysis level inputs due to the parallel engine
-#'    (use single-engine for those inputs)
-#'  
-#'  `continue_on_error` will skip the current simulation (so it won't continue for the rest of patient-arms) if TRUE. 
+#'    (use single-engine for those inputs) `continue_on_error` will skip the current simulation 
+#'    (so it won't continue for the rest of patient-arms) if TRUE. 
 #'  Note that this will make the progress bar not correct, as a set of patients that were expected to be run is not.
 #'
 #' @examples
@@ -247,6 +255,10 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       if(!is.null(categories_other_instant)){categories_other_instant}
     ))
   
+  env_setup_sens <- is.language(sensitivity_inputs)
+  env_setup_sim <- is.language(common_all_inputs)
+  env_setup_pt <- is.language(common_pt_inputs)
+  env_setup_arm <- is.language(unique_pt_inputs)
   
   output_sim <- list()
   
@@ -285,6 +297,11 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
     sens_name_used <- ""
     }
     
+    if(debug){
+      for (evt in names(evt_react_list)) {
+        evt_react_list[[evt]]$debug_vars <- extract_assignment_targets(evt_react_list[[evt]]$react)
+      }
+    }
     
     input_list_sens <- list(
                        psa_bool = psa_bool,
@@ -347,7 +364,11 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                        debug = debug,
                        accum_backwards = accum_backwards,
                        continue_on_error = continue_on_error,
-                       log_list = list()
+                       log_list = list(),
+                       env_setup_sens = env_setup_sens,
+                       env_setup_sim = env_setup_sim,
+                       env_setup_pt = env_setup_pt,
+                       env_setup_arm = env_setup_arm
                       )
     
     if(is.null(seed)){
@@ -356,9 +377,22 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
     set.seed(seed)
     
     # Draw Common parameters  -------------------------------
+    input_list_sens <- as.environment(input_list_sens)
+    parent.env(input_list_sens) <- environment()
+    
+    # Draw Common parameters  -------------------------------
     if(!is.null(sensitivity_inputs)){
       
-      input_list_sens <- load_inputs(inputs = input_list_sens,list_uneval_inputs = sensitivity_inputs)
+      if(env_setup_sens){
+        load_inputs2(inputs = input_list_sens,list_uneval_inputs = sensitivity_inputs)
+      } else{
+        input_list_sens <- as.environment(
+          load_inputs(inputs = as.list(input_list_sens),
+                      list_uneval_inputs = sensitivity_inputs)
+        )
+        parent.env(input_list_sens) <- environment()
+        
+      }
       
       if(input_list_sens$debug){ 
         names_sens_input <- names(sensitivity_inputs)
@@ -366,7 +400,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
         dump_info <- list(
           list(
             prev_value = prev_value,
-            cur_value  = input_list_sens[names_sens_input]
+            cur_value  = mget(names_sens_input,input_list_sens)
           )
         )
         
@@ -379,10 +413,6 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       
     }
     
-    #Make sure there are no duplicated inputs in the model, if so, take the last one
-    duplic <- duplicated(names(input_list_sens),fromLast = TRUE)
-    if (sum(duplic)>0 & sens==1) { warning("Duplicated items detected in the Simulation, using the last one added.\n")  }
-    input_list_sens <- input_list_sens[!duplic]
     
 # Simulation loop ---------------------------------------------------------
     output_sim[[sens]] <- vector("list", length=n_sim) # empty list with n_sim elements
@@ -406,40 +436,43 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       start_time_sim <-  proc.time()
                            
                            
-      input_list <- c(input_list_sens,
-                      simulation = simulation)
+      input_list <- rlang::env_clone(input_list_sens , parent.env(input_list_sens))
+      input_list$simulation <- simulation
       
       set.seed(simulation*1007*seed)
       
       # Draw Common parameters  -------------------------------
       if(!is.null(common_all_inputs)){
         
-        input_list <- load_inputs(inputs = input_list,list_uneval_inputs = common_all_inputs)
+        if(env_setup_sim){
+          load_inputs2(inputs = input_list,list_uneval_inputs = common_all_inputs)
+        } else{
+          input_list <- as.environment(
+            load_inputs(inputs = as.list(input_list),
+                        list_uneval_inputs = common_all_inputs)
+          )
+          parent.env(input_list) <- parent.env(input_list_sens)
+        }
         
         if(input_list_sens$debug){ 
           names_all_input <- names(common_all_inputs)
           prev_value <- setNames(vector("list", length(common_all_inputs)), names_all_input)
-          prev_value[names_all_input] <- input_list_sens[names_all_input]
+          prev_value[names_all_input] <- mget(names_all_input,input_list_sens)
           dump_info <- list(
             list(
               prev_value = prev_value,
-              cur_value  = input_list[names_all_input]
+              cur_value  = mget(names_all_input,input_list) 
             )
           )
           
           names(dump_info) <- paste0("Analysis: ", input_list$sens," ", input_list$sens_name_used,
-                                     "; Sim: ", input_list$sim,
+                                     "; Sim: ", input_list$simulation,
                                      "; Statics"
           )
           
           log_list <- c(log_list,dump_info)
         }
       }
-  
-      #Make sure there are no duplicated inputs in the model, if so, take the last one
-      duplic <- duplicated(names(input_list),fromLast = TRUE)
-      if (sum(duplic)>0 & simulation==1 & sens==1) { warning("Duplicated items detected in the Simulation, using the last one added.\n")  }
-      input_list <- input_list[!duplic]
   
       if(is.null(input_list$drc)){input_list$drc <- 0.03}
       if(is.null(input_list$drq)){input_list$drq <- 0.03}
@@ -461,6 +494,10 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                   if(exists("simulation")){simulation}else{"None"},
                   ". Error message: ",final_output$error_m
           )
+          if(debug){
+            return(list(final_output))
+          }
+          
           return(list(NULL))
         } else{
           stop(final_output$error_m)
@@ -475,7 +512,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       
       final_output <- c(list(sensitivity_name = sens_name_used), final_output)
       
-      if(debug){
+      if(input_list$debug){
         log_list <- lapply(log_list,transform_debug)
         
         final_output$log_list <- c(log_list,final_output$log_list)
@@ -518,7 +555,6 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       
      }
     
-    
 
     message(paste0("Time to run analysis ", sens,": ",  round(proc.time()[3]- start_time_analysis[3] , 2 ), "s"))
     
@@ -534,30 +570,30 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                 e$message)
       } else{
         if(debug){
-          if(length(log_list)>0){
-            if(!exists("final_output")){
+          if(!exists("final_output") & length(log_list)>0){
             export_log(lapply(log_list,transform_debug),paste0("log_model_",format(Sys.time(), "%Y_%m_%d_%Hh_%mm_%Ss"),".txt"))
             stop(e$message)
-            }else{
-                if(exists("output_sim")){
-                  final_log <- unlist(
-                    unlist(
-                      lapply(output_sim, function(y) lapply(y, function(x) x$log_list )),
-                      recursive = FALSE),
-                    recursive = FALSE)
-                } else{
-                  log_list <- lapply(log_list,transform_debug)
-                  final_output <- list()
-                  final_output$log_list <- c(log_list,final_output$log_list)
-                  final_log <- final_output$log_list
-                }
-                
-                export_log(final_log,paste0("log_model_",format(Sys.time(), "%Y_%m_%d_%Hh_%mm_%Ss"),".txt"))
-              } 
+          }else if(exists("output_sim")){
+            final_log <- unlist(
+              unlist(
+                lapply(output_sim, function(y) lapply(y, function(x) x$log_list )),
+                recursive = FALSE),
+              recursive = FALSE)
+            
+            export_log(final_log,paste0("log_model_",format(Sys.time(), "%Y_%m_%d_%Hh_%mm_%Ss"),".txt"))
+            
+          } else if(!exists("output_sim") & exists("final_output")){
+            log_list <- lapply(log_list,transform_debug)
+            final_output <- list()
+            final_output$log_list <- c(log_list,final_output$log_list)
+            final_log <- final_output$log_list
+            
+            export_log(final_log,paste0("log_model_",format(Sys.time(), "%Y_%m_%d_%Hh_%mm_%Ss"),".txt"))
             
           } else{
             message("No data to export.")
           }
+          
           stop("Log will be exported if data exists. Error message at analysis ",
                sens,
                "; simulation: ",
@@ -578,7 +614,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
 
   # Export results ----------------------------------------------------------
   if(debug){
-    if(length(log_list)>0){
+    if(length(log_list)>0 | exists("output_sim")){
         if(exists("output_sim")){
           final_log <- unlist(
             unlist(

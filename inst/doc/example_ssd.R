@@ -23,18 +23,19 @@ options(tibble.print_max = 50)
 #We don't need to use sensitivity_inputs here, so we don't add that object
 
 #Put objects here that do not change on any patient or intervention loop
-common_all_inputs <-add_item(
-                      util.sick = 0.8,
-                      util.sicker = 0.5,
-                      cost.sick = 3000,
-                      cost.sicker = 7000,
-                      cost.int = 1000,
-                      coef_noint = log(0.2),
-                      HR_int = 0.8,
-                      drc = 0.035, #different values than what's assumed by default
-                      drq = 0.035,
-                      random_seed_sicker_i = sample.int(100000,1000,replace = FALSE)
-)  #to be used as seeds to draw the time to event for sicker, to ensure same luck for the same patient independently of the arm
+#We use add_item2 and add_item to showcase how the user can implement the inputs (either works, add_item2 is just faster)
+common_all_inputs <-add_item2(input = {
+                      util.sick   <- 0.8
+                      util.sicker <- 0.5
+                      cost.sick   <- 3000
+                      cost.sicker <- 7000
+                      cost.int    <- 1000
+                      coef_noint  <- log(0.2)
+                      HR_int      <- 0.8
+                      drc         <- 0.035 #different values than what's assumed by default
+                      drq         <- 0.035
+                      random_seed_sicker_i <- sample.int(100000,npats,replace = FALSE)
+})  #to be used as seeds to draw the time to event for sicker, to ensure same luck for the same patient independently of the arm
 
 
 #Put objects here that do not change as we loop through treatments for a patient
@@ -61,16 +62,44 @@ evt_react_list <-
                input = {}) %>%
   add_reactevt(name_evt = "sicker",
                input = {
-                 modify_item(list(q_default = util.sicker,
-                                  c_default = cost.sicker + if(arm=="int"){cost.int}else{0},
-                                  fl.sick = 0)) 
+                 q_default <- util.sicker
+                 c_default <- cost.sicker + if(arm=="int"){cost.int}else{0}
+                 fl.sick   <- 0 
                }) %>%
   add_reactevt(name_evt = "death",
                input = {
-                 modify_item(list(q_default = 0,
-                                  c_default = 0, 
-                                  curtime = Inf)) 
+                 q_default <- 0
+                 c_default <- 0
+                 curtime   <- Inf
                }) 
+
+
+# Below how it would be set up if using `accum_backwards = TRUE` in `run_sim()` (and will give equal final results)
+# Note that we set the value applied in the reaction right up to the event, changing the interpretation of the reaction
+# It is also a slower method than the standard approach
+# In this case we use `modify_item_seq` in the reaction for death, but given that the items are not interacting with each other,
+# we could use `modify_item` instead and make the computation faster
+#
+# evt_react_list <-
+#     add_reactevt(name_evt = "sick",
+#                  input = {}) %>%
+#     add_reactevt(name_evt = "sicker",
+#                  input = {
+#                      modify_item(list(
+#                      q_default = util.sick,
+#                      c_default = cost.sick + if(arm=="int"){cost.int}else{0},
+#                      fl.sick = 0
+#                      ))
+#                  }) %>%
+#     add_reactevt(name_evt = "death",
+#                  input = {
+#                      c_dis <- if(fl.sick==1){cost.sick}else{cost.sicker} 
+#                      modify_item_seq(list(
+#                      q_default = if(fl.sick==1){util.sick}else{util.sicker},
+#                      c_default = c_dis + if(arm=="int"){cost.int}else{0},
+#                      curtime = Inf
+#                      ))
+#                  }) 
 
 
 ## ----model_relatioships-------------------------------------------------------

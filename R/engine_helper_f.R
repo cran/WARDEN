@@ -46,10 +46,6 @@ load_inputs <- function(inputs,list_uneval_inputs){
     if(any(is.null(names(list.eval_inputs)), names(list.eval_inputs)=="") & length(list.eval_inputs)==1) {
       inputs[names(list.eval_inputs[[1]])] <- list.eval_inputs[[1]]
     } else{
-      # Remove warning for now, as it gets repeated a lot
-      # if (!is.null(names(list.eval_inputs[[1]]))) {
-      #   warning("Item ", names(list.eval_inputs), " is named. It is advised to assign unnamed objects if they are going to be processed in the model, as they can create errors depending on how they are used within the model.\n")
-      # }
       inputs[names(list.eval_inputs)] <- list.eval_inputs
       
     }
@@ -58,6 +54,21 @@ load_inputs <- function(inputs,list_uneval_inputs){
   return(inputs)
 }
 
+#' Function to load input expressions
+#'
+#' @param inputs Environment of existing inputs
+#' @param list_uneval_inputs List of unevaluated inputs (substituted expressions)
+#'
+#' @return Nothing (updated inputs environment)
+#'
+#' @examples
+#' load_inputs2(inputs = input_list_pt,list_uneval_inputs = common_pt_inputs)
+#'
+#' @keywords internal
+#' @noRd
+load_inputs2 <- function(inputs,list_uneval_inputs){
+  eval(list_uneval_inputs, inputs)
+}
 
 # Initial event list --------------------------------------------------------------------------------------------------------------------------------------
 
@@ -77,26 +88,24 @@ load_inputs <- function(inputs,list_uneval_inputs){
 
 initiate_evt <- function(arm_name,input_list_arm){
   position <- which(arm_name==names(input_list_arm$init_event_list))
-
-  time_data <- local({
-    evts_v <- input_list_arm$init_event_list[[position]][["evts"]]
-    
-    othert_v <- input_list_arm$init_event_list[[position]][["other_inp"]]
-    
-    list2env(mget(c(evts_v,othert_v),ifnotfound=Inf), envir=environment()) #initialize
-    
-    eval(input_list_arm$init_event_list[[position]][["expr"]]) #run script
-    
-    evttime <- lapply(mget(evts_v,ifnotfound=Inf),unname) #get event times and make sure they are unnamed
-    
-    othertime <- if(!is.null(othert_v)){mget(othert_v,ifnotfound=Inf)} else{NULL}  #get other inputs times
-    
-    out <- list(evttime=evttime, othertime=othertime)
-  },input_list_arm)
-
+  
+  evts_v <- input_list_arm$init_event_list[[position]][["evts"]]
+  
+  othert_v <- input_list_arm$init_event_list[[position]][["other_inp"]]
+  
+  list2env(mget(c(evts_v,othert_v),ifnotfound=Inf, envir=input_list_arm), envir=input_list_arm) #initialize
+  
+  eval(input_list_arm$init_event_list[[position]][["expr"]], input_list_arm) #run script
+  
+  evttime <- lapply(mget(evts_v,ifnotfound=Inf, envir=input_list_arm),unname) #get event times and make sure they are unnamed
+  othertime <- if(!is.null(othert_v)){mget(othert_v,ifnotfound=Inf, envir=input_list_arm)} else{NULL}  #get other inputs times
+  
+  time_data <- list(evttime=evttime, othertime=othertime)
+  
   #Event data
   cur_evtlist <- unlist(time_data$evttime)
   
+  #we should not need to have it return input_list_arm as it modifies by reference? 
   return(list(cur_evtlist = cur_evtlist, time_data = unlist(time_data$othertime)))
 }
 
@@ -176,14 +185,20 @@ react_evt <- function(thisevt,arm,input_list_arm=NULL){      # This function pro
   evt_arm <- paste(evt,arm,sep = "_")
   
   #Reset instantaneous costs/qalys/others
-
   if(!is.null(input_list_arm$uc_lists$instant_inputs)){
-    input_list_arm[input_list_arm$uc_lists$instant_inputs] <- 0
+    
+    for (var_name in input_list_arm$uc_lists$instant_inputs) {
+      assign(var_name, 0, envir = input_list_arm)
+    }
   }
   
   if(input_list_arm$accum_backwards){
     if(!is.null(input_list_arm$uc_lists$ongoing_inputs)){
-      input_list_arm[input_list_arm$ongoing_inputs_lu] <- 0
+
+      for (var_name in input_list_arm$ongoing_inputs_lu) {
+        assign(var_name, 0, envir = input_list_arm)
+      }
+
     }
   }
   
@@ -226,21 +241,46 @@ eval_reactevt <-  function(react_list,evt_name,input_list_arm=NULL){
   }
 
 # Evaluate reaction -------------------------------------------------------
+  #debug bit (pre-evaluation)
+  if(input_list_arm$debug){
+    prev_values <- mget(react_list[[position]][["debug_vars"]], input_list_arm, ifnotfound = Inf)
 
-    
-    
-    input_list_arm <- local({
-      input_list_arm <- input_list_arm
-      eval(react_list[[position]][["react"]]) #run script
-      out <- input_list_arm
-    },input_list_arm)
-    
-    
-    
+    loc <- paste0("Analysis: ", input_list_arm$sens," ", input_list_arm$sens_name_used,
+                  "; Sim: ", input_list_arm$simulation,
+                  "; Patient: ", input_list_arm$i,
+                  "; Arm: ", input_list_arm$arm,
+                  "; Event: ", input_list_arm$evt,
+                  "; Time: ", round(input_list_arm$curtime,3)
+    )
+  }
   
+  #evaluate event
+  eval(react_list[[position]][["react"]], input_list_arm)
+  
+  #debug bit (after evaluation)
+  if(input_list_arm$debug){
+    
+    cur_values <- mget(react_list[[position]][["debug_vars"]], input_list_arm)
+    
+    if(!is.null(input_list_arm$log_list[[loc]])){
+      input_list_arm$log_list[[loc]]$prev_value <- c(input_list_arm$log_list[[loc]]$prev_value, prev_values)
+      input_list_arm$log_list[[loc]]$cur_value <- c(input_list_arm$log_list[[loc]]$cur_value,cur_values)
+      
+    }else{
+      dump_info <- list(
+        list(
+          prev_value = prev_values,
+          cur_value = cur_values
+        )
+      )
+      names(dump_info) <- loc
+      
+      input_list_arm$log_list <- c(input_list_arm$log_list, dump_info)
+      
+    }
+  }
   return(input_list_arm)
   
-
 }
 
 
@@ -469,7 +509,7 @@ expand_evts_bwd <- function(data, time_points, reset_columns = NULL) {
     is_last_expansion <- sequence(num_expanded_rows) == num_expanded_rows
     
     # Reset the specified columns for all non-last expanded rows
-    expanded_data[!is_last_expansion, (columns_to_reset) := 0, with = FALSE]
+    expanded_data[!is_last_expansion, (columns_to_reset) := 0]
   }
   
   # Make sure prevtime doesn't exceed evttime
@@ -528,7 +568,7 @@ expand_evts_fwd <- function(data, time_points, reset_columns = NULL) {
     # Create a vector indicating which rows are the first in their expanded series
     is_first_expansion <- sequence(num_expanded_rows) == 1
     
-    expanded_data[!is_first_expansion, (columns_to_reset) := 0, with = FALSE]
+    expanded_data[!is_first_expansion, (columns_to_reset) := 0]
   }
   
   expanded_data[, prevtime := shift(evttime, fill = 0), by = .(pat_id, arm)]
@@ -770,7 +810,7 @@ compute_outputs_timseq <- function(freq,
     
   }
   
-  final_out_sorted <- names(timed_output)[!names(timed_output) %in% vector_total_outputs]
+  final_out_sorted <- names(timed_output)[!names(timed_output) %chin% vector_total_outputs]
   order_final_output <- c(vector_total_outputs,final_out_sorted[order(final_out_sorted)])
   timed_output <- c(list(arm_list=arm_list),list(timepoints=time_points),timed_output[order_final_output])
   
@@ -793,7 +833,6 @@ compute_outputs_timseq <- function(freq,
 #' @import data.table
 #' @importFrom utils tail
 #' @importFrom zoo na.locf
-
 #' 
 #' @details
 #' It computes the discounted and undiscounted lys/costs/qalys. 
@@ -827,7 +866,7 @@ compute_outputs <- function(patdata,input_list) {
   list_patdata <- NULL
 
   #Split the data as to be exported as a data.table, and the extra data the user described
-  data_export_aslist <- input_list$input_out[!input_list$input_out %in% input_list$categories_for_export]
+  data_export_aslist <- input_list$input_out[!input_list$input_out %chin% input_list$categories_for_export]
   data_export_summarized_nonumeric <- data_export_aslist
     
   for (arm_i in arm_list) {
@@ -840,20 +879,20 @@ compute_outputs <- function(patdata,input_list) {
   #as there could be matrices or other objects not suitable for data.table
   
   items_length_greater_than_one <- unlist(list_patdata,recursive=FALSE)
-  items_length_greater_than_one <- items_length_greater_than_one[names(items_length_greater_than_one) %in% data_export_aslist]
+  items_length_greater_than_one <- items_length_greater_than_one[names(items_length_greater_than_one) %chin% data_export_aslist]
   
-  items_length_one_numeric <- unlist(lapply(items_length_greater_than_one, function(x) length(x)==1 & is.numeric(x)))
+  items_length_one_numeric <- (lengths(items_length_greater_than_one) == 1) & unlist(lapply(items_length_greater_than_one, function(x) is.numeric(x)))
   items_length_one_numeric <- items_length_one_numeric[items_length_one_numeric==TRUE]
   
-  items_length_greater_than_one <- unlist(lapply(items_length_greater_than_one, function(x) length(x)>1))
+  items_length_greater_than_one <- lengths(items_length_greater_than_one) > 1
   items_length_greater_than_one <- items_length_greater_than_one[items_length_greater_than_one==TRUE]
   
   data_export_aslist <- unique(names(items_length_greater_than_one))
   data_export_tobesummarized <- unique(names(items_length_one_numeric))
-  data_export_summarized_nonumeric <- data_export_summarized_nonumeric[!data_export_summarized_nonumeric %in% c(data_export_aslist,data_export_tobesummarized)]
+  data_export_summarized_nonumeric <- data_export_summarized_nonumeric[!data_export_summarized_nonumeric %chin% c(data_export_aslist,data_export_tobesummarized)]
   
   if (length(data_export_aslist)>0) {
-    list_patdata2 <- lapply(list_patdata,function(x) x[!names(x) %in% data_export_aslist])
+    list_patdata2 <- lapply(list_patdata,function(x) x[!names(x) %chin% data_export_aslist])
   } else{
     list_patdata2 <- list_patdata
   }
@@ -887,7 +926,7 @@ compute_outputs <- function(patdata,input_list) {
   
 
   if(input_list$accum_backwards){ #if accumulating backwards, need to rewrite values
-  
+
     for (cat in input_list$uc_lists$ongoing_inputs) {
       cat_lastupdate <- paste0(cat, "_lastupdate")
   
@@ -1035,25 +1074,56 @@ compute_outputs <- function(patdata,input_list) {
 
   #Add to final outputs the total outcomes as well as the cost/utility categories totals
   vector_other_outputs <- c(input_list$categories_for_export,prepared_outputs_v)
+  
+  agg_dt <- patdata_dt[,
+                       lapply(.SD, sum, na.rm = TRUE),
+                       by = .(pat_id, arm), 
+                       .SDcols = vector_total_outputs_search][,
+                                                              lapply(.SD, mean, na.rm = TRUE),
+                                                              by = arm,
+                                                              .SDcols = vector_total_outputs_search]
+  
+  agg_other_dt <- patdata_dt[,
+                             lapply(.SD, sum, na.rm = TRUE),
+                             by = .(pat_id, arm), 
+                             .SDcols = vector_other_outputs][,
+                                                             lapply(.SD, mean, na.rm = TRUE),
+                                                             by = arm,
+                                                             .SDcols = vector_other_outputs]
+  
+  #Gets last value from patient, then average for numeric
+  agg_export_dt <-  patdata_dt[,
+                               lapply(.SD, function(x) tail(x*is.finite(x),n=1,na.rm=TRUE)),
+                               by = .(pat_id, arm), 
+                               .SDcols = data_export_tobesummarized][,
+                                                                     lapply(.SD, mean, na.rm = TRUE),
+                                                                     by = arm,
+                                                                     .SDcols = data_export_tobesummarized]
+  
+  #Gets last value 
+  agg_nonnum_dt <-  patdata_dt[,
+                               lapply(.SD, tail, n=1,na.rm=TRUE),
+                               by = .(pat_id, arm), 
+                               .SDcols = data_export_summarized_nonumeric][,
+                                                                           lapply(.SD, tail, n=1, na.rm = TRUE),
+                                                                           by = arm,
+                                                                           .SDcols = data_export_summarized_nonumeric]
+  
   for (arm_i in arm_list) {
     for (output_i in 1:length(vector_total_outputs)) {
-      final_output[[vector_total_outputs[output_i]]][arm_i] <- patdata_dt[arm==arm_i,.(out=sum(get(vector_total_outputs_search[output_i]),na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+      final_output[[vector_total_outputs[output_i]]][arm_i] <- agg_dt[arm==arm_i,get(vector_total_outputs_search[output_i])]
     }
     for (output_i in vector_other_outputs) {
-      final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=sum(get(output_i),na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+      final_output[[output_i]][arm_i] <- agg_other_dt[arm==arm_i,get(output_i)]
     }
-    
     for (output_i in data_export_tobesummarized) {
-        #Gets last value from patient, then average for numeric
-      final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=tail(get(output_i)*is.finite(get(output_i)),n=1,na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+      #Gets last value from patient, then average for numeric
+      final_output[[output_i]][arm_i] <-agg_export_dt[arm==arm_i,get(output_i)]
     }
     
     for (output_i in data_export_summarized_nonumeric) {
-      #Gets last value 
-      final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=tail(get(output_i),n=1,na.rm=TRUE)),by=.(pat_id)][,tail(out,n=1,na.rm=TRUE)]
+      final_output[[output_i]][arm_i] <- agg_nonnum_dt[arm==arm_i,get(output_i)]
     }
-    
-    
     for (output_i in data_export_aslist) {
       #Get last value
       temp <- Filter(function(sublist) sublist[["arm"]] == arm_i, list_patdata)
@@ -1061,9 +1131,35 @@ compute_outputs <- function(patdata,input_list) {
     }
   }
   
+  # for (arm_i in arm_list) {
+  #   for (output_i in 1:length(vector_total_outputs)) {
+  #     final_output[[vector_total_outputs[output_i]]][arm_i] <- patdata_dt[arm==arm_i,.(out=sum(get(vector_total_outputs_search[output_i]),na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+  #   }
+  #   for (output_i in vector_other_outputs) {
+  #     final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=sum(get(output_i),na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+  #   }
+  #   
+  #   for (output_i in data_export_tobesummarized) {
+  #       #Gets last value from patient, then average for numeric
+  #     final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=tail(get(output_i)*is.finite(get(output_i)),n=1,na.rm=TRUE)),by=.(pat_id)][,mean(out,na.rm=TRUE)]
+  #   }
+  #   
+  #   for (output_i in data_export_summarized_nonumeric) {
+  #     #Gets last value 
+  #     final_output[[output_i]][arm_i] <- patdata_dt[arm==arm_i,.(out=tail(get(output_i),n=1,na.rm=TRUE)),by=.(pat_id)][,tail(out,n=1,na.rm=TRUE)]
+  #   }
+  #   
+  #   
+  #   for (output_i in data_export_aslist) {
+  #     #Get last value
+  #     temp <- Filter(function(sublist) sublist[["arm"]] == arm_i, list_patdata)
+  #     final_output[[output_i]][[arm_i]] <- temp[[length(temp)]][[output_i]]
+  #   }
+  # }
+  
   rm(list_patdata)
   
-  final_out_sorted <- names(final_output)[!names(final_output) %in% vector_total_outputs]
+  final_out_sorted <- names(final_output)[!names(final_output) %chin% vector_total_outputs]
   order_final_output <- c(vector_total_outputs,final_out_sorted[order(final_out_sorted)])
   final_output <- c(list(arm_list=arm_list),final_output[order_final_output])
   
@@ -1078,14 +1174,14 @@ compute_outputs <- function(patdata,input_list) {
     #Get names of columns that will be used, 
     other_cols <- c("pat_id", "arm")
     #Columns that will not be summarized (event related columns, time and total_)
-    cols_to_rm <- colnames(patdata_dt)[grepl("total_",colnames(patdata_dt)) | colnames(patdata_dt) %in% c("evtname", "evttime", "prevtime")]
+    cols_to_rm <- colnames(patdata_dt)[grepl("total_",colnames(patdata_dt)) | colnames(patdata_dt) %chin% c("evtname", "evttime", "prevtime")]
     patdata_dt[,number_events:=1]
     #Numeric columns only
     numeric_c <- sapply(patdata_dt,is.numeric)
     #Columns to sum must be in the right list and also be numeric
-    cols_to_sum <- colnames(patdata_dt)[!colnames(patdata_dt) %in% c(other_cols,cols_to_rm,data_export_tobesummarized) & numeric_c]
+    cols_to_sum <- colnames(patdata_dt)[!colnames(patdata_dt) %chin% c(other_cols,cols_to_rm,data_export_tobesummarized) & numeric_c]
     #Other columns are left as is (takes last value of those)
-    cols_to_leave_as_is <- colnames(patdata_dt)[!colnames(patdata_dt) %in% c(other_cols,cols_to_rm) & !colnames(patdata_dt) %in% c(cols_to_sum)]
+    cols_to_leave_as_is <- colnames(patdata_dt)[!colnames(patdata_dt) %chin% c(other_cols,cols_to_rm) & !colnames(patdata_dt) %chin% c(cols_to_sum)]
     
     #Summarize the data as relevant
     patdata_temp <- patdata_dt[, lapply(.SD, sum, na.rm=TRUE), by=other_cols, .SDcols=cols_to_sum] #sum numeric variables in list
@@ -1097,7 +1193,7 @@ compute_outputs <- function(patdata,input_list) {
       final_output$merged_df <- patdata_temp
     }
     
-    colnames(final_output$merged_df)[colnames(final_output$merged_df) %in% c("qalys","costs","lys","qalys_undisc","costs_undisc","lys_undisc")] <- paste0("total_",colnames(final_output$merged_df)[colnames(final_output$merged_df) %in% c("qalys","costs","lys","qalys_undisc","costs_undisc","lys_undisc")])
+    colnames(final_output$merged_df)[colnames(final_output$merged_df) %chin% c("qalys","costs","lys","qalys_undisc","costs_undisc","lys_undisc")] <- paste0("total_",colnames(final_output$merged_df)[colnames(final_output$merged_df) %chin% c("qalys","costs","lys","qalys_undisc","costs_undisc","lys_undisc")])
 
 
     if (sens==1 & simulation==1) {

@@ -499,7 +499,7 @@ test_that("Model Reactions Interactivity summary can be created",{
   
   expect_length(extract_elements_from_list(ast_as_list(expr)),4) #4 columns
   
-  expect_equal(nrow(extract_elements_from_list(ast_as_list(expr))),39) #39 items/events changed
+  expect_equal(nrow(extract_elements_from_list(ast_as_list(expr))),43) #43 items/events changed, including assignments
   
   a <- add_reactevt(name_evt="example",
                     input={
@@ -508,14 +508,14 @@ test_that("Model Reactions Interactivity summary can be created",{
                     })
   
   
-  expect_equal(nrow(extract_from_reactions(a)),1) #1 items/events changed
+  expect_equal(nrow(extract_from_reactions(a)),2) #2 items/events changed, including assignments
   
   expect_equal(extract_from_reactions(a),
-               data.table(event = "example",
-                          name = "w",
-                          type = "item",
-                          conditional_flag = FALSE,
-                          definition = "5")
+               data.table(event = c("example","example"),
+                          name = c("a","w"),
+                          type = c("item","item"),
+                          conditional_flag = c(FALSE,FALSE),
+                          definition = c("5","5"))
                ) 
   
   
@@ -538,15 +538,11 @@ test_that("add_tte works as expected", {
 })
 
 test_that("modify_item modifies input items correctly", {
-  input_list_arm <- list(
-    qaly_default_instant = 100, 
-    accum_backwards = TRUE,
-    debug = FALSE,
-    accum_backwards = FALSE
-    
-  )
-  assign("input_list_arm", input_list_arm, envir = parent.frame())
-  
+  input_list_arm <- environment()
+  input_list_arm$qaly_default_instant = 100
+  input_list_arm$debug = FALSE
+  input_list_arm$accum_backwards = FALSE
+
   modify_item(list("qaly_default_instant" = 200))
   expect_equal(input_list_arm$qaly_default_instant, 200)
   
@@ -555,13 +551,14 @@ test_that("modify_item modifies input items correctly", {
 })
 
 test_that("modify_event modifies events correctly", {
-  input_list_arm <- list(
-    cur_evtlist = c(ae = 5, nat.death = 100), 
-    debug = FALSE,
-    accum_backwards = FALSE
-  )
-  assign("input_list_arm", input_list_arm, envir = parent.frame())
-  
+  input_list_arm <- environment()
+  input_list_arm$qaly_default_instant = 100
+  input_list_arm$debug = FALSE
+  input_list_arm$cur_evtlist = FALSE
+  input_list_arm$accum_backwards = FALSE
+  input_list_arm$cur_evtlist = c(ae = 5, nat.death = 100)
+
+
   # Modify an existing event
   modify_event(list(ae = 10))
   expect_equal(input_list_arm$cur_evtlist[["ae"]], 10)
@@ -576,10 +573,12 @@ test_that("modify_event modifies events correctly", {
 })
 
 test_that("new_event adds new events correctly", {
-  input_list_arm <- list(cur_evtlist = c(), 
-                         debug = FALSE,
-                         accum_backwards = FALSE)
-  assign("input_list_arm", input_list_arm, envir = parent.frame())
+  input_list_arm <- environment()
+  input_list_arm$qaly_default_instant = 100
+  input_list_arm$debug = FALSE
+  input_list_arm$cur_evtlist = FALSE
+  input_list_arm$accum_backwards = FALSE
+  input_list_arm$cur_evtlist = c()
   
   new_event(list("ae" = 5))
   expect_equal(input_list_arm$cur_evtlist[["ae"]], 5)
@@ -608,8 +607,13 @@ test_that("replicate_profiles works correctly", {
 
 
 test_that("modify_item_seq works sequentially", {
-  input_list_arm <- list(a = 1, b = 2, curtime = 1, accum_backwards = FALSE, debug = FALSE)
-  assign("input_list_arm", input_list_arm, envir = parent.frame())
+  
+  input_list_arm <- environment()
+  input_list_arm$a <- 1
+  input_list_arm$b <- 2
+  input_list_arm$curtime <- 1
+  input_list_arm$accum_backwards <- FALSE
+  input_list_arm$debug <- FALSE
   
   # Test sequential modification
   modify_item_seq(list(a = 3, b = a + 2))
@@ -640,6 +644,9 @@ test_that("add_reactevt adds reactions correctly", {
 })
 
 
+# Luck_adj ----------------------------------------------------------------
+
+
 test_that("luck_adj adjusts luck correctly", {
   # Test single values
   adj <- luck_adj(prevsurv = 0.8, cursurv = 0.6, luck = 0.9, condq = TRUE)
@@ -656,5 +663,41 @@ test_that("luck_adj adjusts luck correctly", {
 })
 
 
+# Random Streams ----------------------------------------------------------
 
+
+test_that("random_stream initializes correctly", {
+  random_stream_instance <- random_stream(10)
+  
+  expect_type(random_stream_instance, "environment")
+  expect_equal(length(random_stream_instance$stream), 10, info = "The stream should initialize with 10 elements")
+})
+
+test_that("draw_n draws correct number of elements", {
+  random_stream_instance <- random_stream(10)
+  
+  drawn_numbers <- random_stream_instance$draw_n(3)
+  
+  expect_equal(length(drawn_numbers), 3, info = "draw_n should draw 3 elements")
+  expect_equal(length(random_stream_instance$stream), 7, info = "The stream should have 7 elements left after drawing 3")
+})
+
+test_that("draw_n with larger n regenerates stream", {
+  random_stream_instance <- random_stream(5)
+  
+  expect_warning(drawn_numbers_large <- random_stream_instance$draw_n(8),
+                 "Stream is smaller than the number of numbers drawn",
+                 info = "Should warn when trying to draw more elements than available")
+  
+  expect_equal(length(drawn_numbers_large), 8, info = "After regenerating, draw_n should return 8 elements")
+  expect_equal(length(random_stream_instance$stream), 0, info = "After drawing all elements, the stream should be empty")
+})
+
+test_that("generate_stream changes stream length", {
+  random_stream_instance <- random_stream(5)
+  
+  random_stream_instance$generate_stream(20)
+  
+  expect_equal(length(random_stream_instance$stream), 20, info = "generate_stream should change stream to the correct size")
+})
 
