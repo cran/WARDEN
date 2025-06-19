@@ -1,9 +1,9 @@
-a897d9a95a64a9bc4e1c65b10065e50c *DESCRIPTION
+39360de78700838c1be3b7b7dbc94a31 *DESCRIPTION
 6cd894df31dd6455f72d82a887f05f41 *NAMESPACE
-a36eac8c004ecf8e5e705fe86bdb840d *NEWS.md
+6eee1dde3014365ddb0a78d6a0ec6be7 *NEWS.md
 b76e1835795e2caa611f59539b2b8175 *R/calculator_f.R
 edfcb2b00ecd300d655e59bbd8a4cfbb *R/data.R
-a3e7e915ad808157054d211504387205 *R/engine_helper_f.R
+1b18d5e54e601935493561f6474e6c62 *R/engine_helper_f.R
 4489fb0ea99783a90064db9194b43b1a *R/input_f.R
 0a590888a5dc1d6f411127b5ecc1369e *R/results_summary_f.R
 c766a1a3e4415036f9d5abc7b91626f7 *R/run_engine.R
@@ -14,7 +14,7 @@ fab9d1d095194590ee6f99792576ef8c *build/vignette.rds
 496c3a8aa6d5de1304cddf7b6474726f *data/tte.df.rda
 41ae8d6e8e5b690cd36c0ab3ff2c110d *inst/doc/example_ssd.R
 cea0bd622e8996ce190182f7e745aa5f *inst/doc/example_ssd.Rmd
-ad54fd12d11043eabaf2553a67e43c28 *inst/doc/example_ssd.html
+5eb682076e6ea686663b971fe486f512 *inst/doc/example_ssd.html
 54a0fab016d3a9daf220f9078cb4d0f3 *inst/figures/WARDEN_logo_small.png
 f3a06ee474f456b0c6c2a1565061d74b *man/add_item.Rd
 db00e7a5bafaaa30a7ff928c47ed8ba1 *man/add_item2.Rd
