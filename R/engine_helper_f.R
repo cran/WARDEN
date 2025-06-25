@@ -70,6 +70,38 @@ load_inputs2 <- function(inputs,list_uneval_inputs){
   eval(list_uneval_inputs, inputs)
 }
 
+#' Function for debugging export
+#'
+#' @param old_data Old inputs before changes
+#' @param new_data New inputs after changes
+#'
+#' @return dump_info list of previous and current values
+#'
+#' @examples
+#' debug_inputs(input_list_pt,input_list_arm)
+#'
+#' @keywords internal
+#' @noRd
+debug_inputs <- function(old_data=NULL,new_data){
+  if(is.null(old_data)){
+    old_data <- environment()
+  }
+  names_new_inputs <- names(new_data)[!names(new_data) %in% new_data$names_rm_debug]
+  names_new_inputs <- names_new_inputs[!is.na(names_new_inputs)]
+  prev_value <- setNames(vector("list", length(names_new_inputs)), names_new_inputs)
+  prev_value[names_new_inputs] <- mget(names_new_inputs,old_data, ifnotfound = list(NULL))
+  cur_value <- mget(names_new_inputs,new_data)
+  
+  dif_vals <- !sapply(names_new_inputs, function(x) identical(prev_value[[x]],cur_value[[x]]))
+  dump_info <- list(
+    list(
+      prev_value = prev_value[dif_vals],
+      cur_value  = cur_value[dif_vals]
+    )
+  )
+  
+}
+
 # Initial event list --------------------------------------------------------------------------------------------------------------------------------------
 
 #' Execute the initial time to events and separate the events from other inputs that are stored
@@ -290,7 +322,7 @@ eval_reactevt <-  function(react_list,evt_name,input_list_arm=NULL){
 #'
 #' @param x The specific cost/utility and its type (ongoing, instant...) to be used
 #' @param ifnull Value to be used if the input has not been defined
-#' @param type Identifies what type of input is being used. Can be "cost", "util", "cycle_l" (cycle length) and "cycle_starttime" (starting time of the cycle)
+#' @param type Identifies what type of input is being used. Can be "cost", "util", "cycle_l" (cycle length), "max_cycles" and "cycle_starttime" (starting time of the cycle)
 #' @param evt_arm_i The event-intervention identifier to understand which specific input to use, separated by an underscore
 #' @param input_list_arm_i  A list of simulation inputs
 #'
@@ -655,7 +687,7 @@ compute_outputs_timseq <- function(freq,
                                                                lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                                lclval=get(cat))]
     
-    final_filtered[,paste0(cat) := disc_ongoing_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_ongoing){input_list$drq}else{input_list$drc},
+    final_filtered[,paste0(cat) := disc_ongoing_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_ongoing){input_list$drc}else{input_list$drq},
                                                   lclprvtime=if(input_list$accum_backwards){prevtime}else{evttime},
                                                   lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                   lclval=get(cat))]
@@ -680,7 +712,7 @@ compute_outputs_timseq <- function(freq,
                                                                lclcurtime=evttime,
                                                                lclval=get(cat))]
     
-    final_filtered[,paste0(cat) := disc_instant_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_instant){input_list$drq}else{input_list$drc},
+    final_filtered[,paste0(cat) := disc_instant_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_instant){input_list$drc}else{input_list$drq},
                                                   lclcurtime=evttime,
                                                   lclval=get(cat))]
     
@@ -703,14 +735,16 @@ compute_outputs_timseq <- function(freq,
                                                              cyclelength = get(paste0(cat,"_","cycle_l")),
                                                              lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                              lclval= get(cat),
-                                                             starttime = get(paste0(cat,"_","cycle_starttime")))] 
+                                                             starttime = get(paste0(cat,"_","cycle_starttime")),
+                                                             max_cycles = get(paste0(cat,"_","max_cycles")))] 
     
-    final_filtered[,paste0(cat) := disc_cycle_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_cycle){input_list$drq}else{input_list$drc},
+    final_filtered[,paste0(cat) := disc_cycle_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_cycle){input_list$drc}else{input_list$drq},
                                                 lclprvtime=if(input_list$accum_backwards){prevtime}else{evttime},
                                                 cyclelength = get(paste0(cat,"_","cycle_l")),
                                                 lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                 lclval= get(cat),
-                                                starttime = get(paste0(cat,"_","cycle_starttime")))]
+                                                starttime = get(paste0(cat,"_","cycle_starttime")),
+                                                max_cycles = get(paste0(cat,"_","max_cycles")))]
     
     if(cat %in% input_list$uc_lists$cost_categories_cycle){
       final_filtered[, "costs" := costs + get(cat)]
@@ -896,9 +930,9 @@ compute_outputs <- function(patdata,input_list) {
   } else{
     list_patdata2 <- list_patdata
   }
-  
+ 
   patdata_dt <- rbindlist(list(patdata_dt,rbindlist(list_patdata2,fill=TRUE)))
-  
+
   rm(list_patdata2)
   
   #Extract only extra data that the user wants to export
@@ -968,7 +1002,7 @@ compute_outputs <- function(patdata,input_list) {
                                                                         lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                                         lclval=get(cat))]
     
-    patdata_dt[,paste0(cat) := disc_ongoing_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_ongoing){input_list$drq}else{input_list$drc},
+    patdata_dt[,paste0(cat) := disc_ongoing_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_ongoing){input_list$drc}else{input_list$drq},
                                                                  lclprvtime=if(input_list$accum_backwards){prevtime}else{evttime},
                                                                  lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                                  lclval=get(cat))]
@@ -993,7 +1027,7 @@ compute_outputs <- function(patdata,input_list) {
                                                                         lclcurtime=evttime,
                                                                         lclval=get(cat))]
     
-    patdata_dt[,paste0(cat) := disc_instant_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_instant){input_list$drq}else{input_list$drc},
+    patdata_dt[,paste0(cat) := disc_instant_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_instant){input_list$drc}else{input_list$drq},
                                                                  lclcurtime=evttime,
                                                                  lclval=get(cat))]
     
@@ -1011,19 +1045,22 @@ compute_outputs <- function(patdata,input_list) {
   
   #Discount and undiscount cycle
   for (cat in input_list$uc_lists$cycle_inputs) {
+    
     patdata_dt[,paste0(cat,"_","undisc") := disc_cycle_v(lcldr=0,
                                                                     lclprvtime=if(input_list$accum_backwards){prevtime}else{evttime},
                                                                     cyclelength = get(paste0(cat,"_","cycle_l")),
                                                                     lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                                     lclval= get(cat),
-                                                                    starttime = get(paste0(cat,"_","cycle_starttime")))] 
+                                                                    starttime = get(paste0(cat,"_","cycle_starttime")),
+                                                                    max_cycles = get(paste0(cat,"_","max_cycles")))] 
     
-    patdata_dt[,paste0(cat) := disc_cycle_v(lcldr=if(cat %in% input_list$uc_lists$util_categories_cycle){input_list$drq}else{input_list$drc},
+    patdata_dt[,paste0(cat) := disc_cycle_v(lcldr=if(cat %in% input_list$uc_lists$cost_categories_cycle){input_list$drc}else{input_list$drq},
                                                              lclprvtime=if(input_list$accum_backwards){prevtime}else{evttime},
                                                              cyclelength = get(paste0(cat,"_","cycle_l")),
                                                              lclcurtime=if(input_list$accum_backwards){evttime}else{nexttime},
                                                              lclval= get(cat),
-                                                             starttime = get(paste0(cat,"_","cycle_starttime")))]
+                                                             starttime = get(paste0(cat,"_","cycle_starttime")),
+                                                             max_cycles = get(paste0(cat,"_","max_cycles")))]
     
     if(cat %in% input_list$uc_lists$cost_categories_cycle){
       patdata_dt[, "costs" := costs + get(cat)]

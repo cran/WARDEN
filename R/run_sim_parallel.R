@@ -82,11 +82,12 @@ if(getRversion() >= "2.15.1") {
 #'   as the standard assignment approach (e.g., `a <- 5`) will not calculate the right results, particularly in the presence of
 #'   conditional statements.
 #' 
-#' If the `cycle` lists are used, then it is expected the user will declare as well the name of the variable
-#'  pasted with `cycle_l` and `cycle_starttime` (e.g., c_default_cycle_l and c_default_cycle_starttime) to 
-#'  ensure the discounting can be computed using cycles, with cycle_l being the cycle length, and cycle_starttime 
-#'  being the starting time in which the variable started counting.
-#'  
+#'  If the `cycle` lists are used, then it is expected the user will declare as well the name of the variable
+#'   pasted with `cycle_l` and `cycle_starttime` (e.g., c_default_cycle_l and c_default_cycle_starttime) to 
+#'   ensure the discounting can be computed using cycles, with cycle_l being the cycle length, and cycle_starttime 
+#'   being the starting time in which the variable started counting. Optionally,  `max_cycles` must also be added (if no
+#'   maximum number of cycles, it should be set equal to NA).
+#'     
 #'  `debug = TRUE` will export a log file with the timestamp up the error in the main working directory. Note that
 #'  using this mode without modify_item or modify_item_seq may lead to inaccuracies if assignments are done in non-standard ways,
 #'  as the AST may not catch all the relevant assignments (e.g., an assigment like assign(paste("x_",i),5)
@@ -247,13 +248,14 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
   categories_for_export <- unique(
     c(if(!is.null(categories_costs_ongoing)){categories_costs_ongoing},
       if(!is.null(categories_costs_instant)){categories_costs_instant},
-      if(!is.null(categories_costs_cycle)){categories_costs_cycle},
+      if(!is.null(categories_costs_cycle)){c(categories_costs_cycle,paste0(categories_costs_cycle,"_cycle_l"),paste0(categories_costs_cycle,"_cycle_starttime"),paste0(categories_costs_cycle,"_max_cycles"))},
       if(!is.null(categories_utilities_ongoing)){categories_utilities_ongoing},
       if(!is.null(categories_utilities_instant)){categories_utilities_instant},
-      if(!is.null(categories_utilities_cycle)){categories_utilities_cycle},
+      if(!is.null(categories_utilities_cycle)){c(categories_utilities_cycle,paste0(categories_utilities_cycle,"_cycle_l"),paste0(categories_utilities_cycle,"_cycle_starttime"),paste0(categories_utilities_cycle,"_max_cycles"))},
       if(!is.null(categories_other_ongoing)){categories_other_ongoing},
       if(!is.null(categories_other_instant)){categories_other_instant}
     ))
+  
   
   env_setup_sens <- is.language(sensitivity_inputs)
   env_setup_sim <- is.language(common_all_inputs)
@@ -395,14 +397,8 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
       }
       
       if(input_list_sens$debug){ 
-        names_sens_input <- names(sensitivity_inputs)
-        prev_value <- setNames(vector("list", length(sensitivity_inputs)), names_sens_input)
-        dump_info <- list(
-          list(
-            prev_value = prev_value,
-            cur_value  = mget(names_sens_input,input_list_sens)
-          )
-        )
+        dump_info <- debug_inputs(NULL,input_list_sens)
+        
         
         names(dump_info) <- paste0("Analysis: ", input_list_sens$sens," ", input_list_sens$sens_name_used,
                                    "; Structural"
@@ -455,15 +451,8 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
         }
         
         if(input_list_sens$debug){ 
-          names_all_input <- names(common_all_inputs)
-          prev_value <- setNames(vector("list", length(common_all_inputs)), names_all_input)
-          prev_value[names_all_input] <- mget(names_all_input,input_list_sens)
-          dump_info <- list(
-            list(
-              prev_value = prev_value,
-              cur_value  = mget(names_all_input,input_list) 
-            )
-          )
+          dump_info <- debug_inputs(input_list_sens,input_list)
+          
           
           names(dump_info) <- paste0("Analysis: ", input_list$sens," ", input_list$sens_name_used,
                                      "; Sim: ", input_list$simulation,
@@ -530,7 +519,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                   sens,
                   "; simulation: ",
                   if(exists("simulation")){simulation}else{"None"},
-                  ". Error message: ",e$message)
+                  ". Error message: ",e$message," in ", e$call)
         } else{
           if(debug){
             stop("Due to using a parallel engine for simulations, debug file will only include analysis inputs if continue_on_error = FALSE.
@@ -539,14 +528,14 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                   "; simulation: ",
                   if(exists("simulation")){simulation}else{"None"},
                   ". Error message: ",
-                  e$message)
+                  e$message," in ", e$call)
           }else{
             stop("Error message at analysis ",
                  sens,
                  "; simulation: ",
                  if(exists("simulation")){simulation}else{"None"},
                  ". Error message: ",
-                 e$message)
+                 e$message," in ", e$call)
           }
         }
       }
@@ -567,7 +556,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                 "; simulation: ",
                 if(exists("simulation")){simulation}else{"None"},
                 ". Error message: ",
-                e$message)
+                e$message," in ", e$call)
       } else{
         if(debug){
           if(!exists("final_output") & length(log_list)>0){
@@ -599,7 +588,7 @@ run_sim_parallel <- function(arm_list=c("int","noint"),
                "; simulation: ",
                if(exists("simulation")){simulation}else{"None"},
                ". Error message: ",
-               e$message)
+               e$message," in ", e$call)
         }else{
           stop(e$message)
         }
