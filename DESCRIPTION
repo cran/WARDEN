@@ -1,7 +1,7 @@
 Package: WARDEN
 Title: Workflows for Health Technology Assessments in R using Discrete
         EveNts
-Version: 1.2.2
+Version: 1.2.4
 Authors@R: 
     c(person(given = "Javier",
            family = "Sanchez Alvarez",
@@ -26,8 +26,8 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.2
 BugReports: https://github.com/jsanchezalv/WARDEN/issues
-Suggests: dplyr, ggplot2, knitr, rmarkdown, kableExtra, DiagrammeR,
-        testthat (>= 3.0.0), survminer, survival
+Suggests: dplyr, ggplot2, knitr, rmarkdown, kableExtra, testthat (>=
+        3.0.0), survminer, survival
 Imports: purrr, data.table, foreach, future, doFuture, stats, utils,
         flexsurv, MASS, zoo, progressr, magrittr, rlang, tidyr
 VignetteBuilder: knitr
@@ -35,10 +35,10 @@ Config/testthat/edition: 3
 Depends: R (>= 2.10)
 URL: https://jsanchezalv.github.io/WARDEN/
 NeedsCompilation: no
-Packaged: 2025-06-24 14:21:55 UTC; SANCHJX33
+Packaged: 2025-07-04 15:00:32 UTC; SANCHJX33
 Author: Javier Sanchez Alvarez [aut, cre],
   Gabriel Lemyre [ctb],
   Valerie Aponte Ribero [ctb]
 Maintainer: Javier Sanchez Alvarez <javiersanchezeco@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-06-25 12:10:02 UTC
+Date/Publication: 2025-07-04 15:20:02 UTC
