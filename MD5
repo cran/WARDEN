@@ -1,6 +1,6 @@
-2ec2d057b57941e684a64f3f5f177f49 *DESCRIPTION
+f6cf50adc20b9189346cf61adc5ee4ec *DESCRIPTION
 d6157a7a41eadda7a38253fdffcfa577 *NAMESPACE
-75373a70ede0a100fa353f378fc26e43 *NEWS.md
+92e4b4286ff06517175cb37a7b564dd7 *NEWS.md
 4ba7ca2d6960c2ff3b911cbc33cad877 *R/calculator_f.R
 edfcb2b00ecd300d655e59bbd8a4cfbb *R/data.R
 45ca8f77733017f4e8e059e6d87397f6 *R/engine_helper_f.R
@@ -14,13 +14,13 @@ fab9d1d095194590ee6f99792576ef8c *build/vignette.rds
 496c3a8aa6d5de1304cddf7b6474726f *data/tte.df.rda
 41ae8d6e8e5b690cd36c0ab3ff2c110d *inst/doc/example_ssd.R
 cea0bd622e8996ce190182f7e745aa5f *inst/doc/example_ssd.Rmd
-23025842ef21cf33f0c0eb550ea5c3d8 *inst/doc/example_ssd.html
+d78edd0556ebe4763bc6292ca2e3dffe *inst/doc/example_ssd.html
 54a0fab016d3a9daf220f9078cb4d0f3 *inst/figures/WARDEN_logo_small.png
 f3a06ee474f456b0c6c2a1565061d74b *man/add_item.Rd
 db00e7a5bafaaa30a7ff928c47ed8ba1 *man/add_item2.Rd
 a50ab7161534daf821a84d7c9f36491d *man/add_reactevt.Rd
 aea5e6924f6be5f497f8ffbc8fcb3350 *man/add_tte.Rd
-151fda8e398eebcdfbd4946aa1b34362 *man/adj_val.Rd
+24d2134627feb1a90280e4992e91c743 *man/adj_val.Rd
 6f2c5816445edd6f76e8b49a8a539597 *man/ast_as_list.Rd
 776149fc40f01c06045d565e87408561 *man/ceac_des.Rd
 28166ac52280249731074e35c30682da *man/cond_dirichlet.Rd
@@ -54,10 +54,10 @@ d830900181f8a76d070256997db8e129 *man/qcond_gamma.Rd
 99ecdd0b57d4101e01cab27d0fb94a18 *man/qcond_lnorm.Rd
 df90848cfcedcfc4fdcd532239e0c9bb *man/qcond_norm.Rd
 f453bd520c9c54a3a86f15c3c395270d *man/qcond_weibull.Rd
-d7352564f73db984cba044169f633f67 *man/qcond_weibullPH.Rd
+c23f75e285952fe8edf7360d1194ad2a *man/qcond_weibullPH.Rd
 c568f626d7a80f660e9f380c519639c3 *man/qgamma_mse.Rd
-ea36d579250d83b87a0a0a84484baf42 *man/qtimecov.Rd
-fa99b59b2a4106e8e46296bbd0f8259b *man/random_stream.Rd
+c04049ac36fd62032d06d159f5dc37d7 *man/qtimecov.Rd
+9225b40dfb8d6a123ed4e9febba1d252 *man/random_stream.Rd
 279af7bd773b7cfd3a55b8d1093636c6 *man/rbeta_mse.Rd
 b65a0c0ada6717138c16424e93bdcb9c *man/rcond_gompertz.Rd
 101758da1034ca33201036fa80d0f4b6 *man/rcond_gompertz_lu.Rd
@@ -74,6 +74,6 @@ cd88c79fd5f903dd2295efdd6275ba2c *man/replicate_profiles.Rd
 12c4ef5d177f43afb4efd9d14f0ca776 *man/summary_results_sim.Rd
 c11371e480c5a8e5cee3034fd9940fec *man/tte.df.Rd
 068e297ada57ddb673797b3ed3c1e3e0 *tests/testthat.R
-bf85651e1e9bb30bda59ca626a04bac1 *tests/testthat/test-input_f.R
+9a77a5c379becd47e3cb26b61f3e4371 *tests/testthat/test-input_f.R
 17deae367e44aae7acd649a2bd2dfd76 *tests/testthat/test_model_runs.R
 cea0bd622e8996ce190182f7e745aa5f *vignettes/example_ssd.Rmd
